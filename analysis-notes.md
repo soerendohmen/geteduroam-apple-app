@@ -254,6 +254,64 @@ Conclusion: file a new issue. It should explicitly mention `#154` as likely
 sharing the same `.first valid method` root cause, `#161` as a similar
 provider-level limitation, and `#163`/`#139` as distinct trust/EAP-TLS issues.
 
+### 8. Broader `.first` / first-entry audit
+
+Searched the package sources for `.first`, `first(where:)`, `firstObject`,
+`prefix(1)`, `supportedEAPTypes`, `authenticationMethods`, `providers`,
+`IEEE80211`, and related eap-config model fields.
+
+Potentially relevant configuration truncation points:
+
+- `ConnectFeature.swift:1023-1034`: after decoding `EAPIdentityProviderList`,
+  the app chooses the first valid provider:
+  `providerList.providers.first(where: validUntil...)`. This is the code path
+  that aligns with issue `#161`: multiple `EAPIdentityProvider` entries can be
+  decoded, but only one is passed into `EAPConfigurator`.
+- `EAPConfigurator.swift:203-264`: inside the chosen provider, the app maps
+  all `AuthenticationMethod`s to possible `NEHotspotEAPSettings`, then keeps
+  only `.first`. This is the exact path for the UDE PEAP/TTLS issue and likely
+  also the same root cause behind the maintainer comment on `#154` ("only the
+  first valid method is used").
+- `EAPConfigurator.swift:354-364`: inside one authentication method, the app
+  maps all `InnerAuthenticationMethod`s and keeps the first supported one,
+  defaulting to MSCHAPv2. This can be legitimate if Apple's API accepts only
+  one `ttlsInnerAuthenticationType`, but it is another order-sensitive choice.
+  It matters for the UDE source profile because `EAPMethod Type 26` maps to
+  `.eapttlsInnerAuthenticationEAP`.
+
+Checked but probably not the same bug:
+
+- `EAPConfigurator.swift:145-180`: all `CredentialApplicability.IEEE80211`
+  `ConsortiumOID` values are collected with `compactMap`, uppercased with
+  `oids.map`, and assigned to `hs20.roamingConsortiumOIs`. The current code
+  does not directly take only the first RCOI. This is why `#154` is more likely
+  about first valid **method** selection than first OID selection.
+- `EAPConfigurator.swift:152-184`: all SSIDs are collected and a separate
+  `NEHotspotConfiguration` is appended for each SSID.
+- `EAPConfigurator.swift:209-239` and `513-532`: server IDs and CA
+  certificates are handled as arrays; CA import appends all successfully
+  imported certs.
+- `EAPConfigurator.swift:634-639`: `SecPKCS12Import` uses `items.firstObject`
+  and logs if multiple identities are present. This is an EAP-TLS/client-cert
+  special case and should stay out of the PEAP/TTLS fix.
+- `ConnectFeature.swift:144-148` and `628`: profile selection uses
+  `first(where:)` to select the explicit or default UI profile. This is normal
+  UI selection, not silent loss inside one eap-config profile.
+- `LocalizedEntry.localized(...)` and `LocalizedString.localized(...)`: use
+  first matching language or fallback entry. This is normal localization
+  fallback behavior.
+- `NotificationClient.swift:162`: reads one pending renewal reminder from two
+  known notification identifiers. Not related to EAP profile generation.
+- `GeteduroamAppDelegate.swift:86-90`: selects current window scene/key window.
+  UI plumbing only.
+
+Overall: the strongest shared code-level issue is not "every `.first` is bad";
+it is specifically that the eap-config hierarchy is reduced at two levels:
+first valid `EAPIdentityProvider`, then first valid `AuthenticationMethod`.
+The UDE report should focus on the second level while acknowledging that `#161`
+points at the first level and `#154` likely surfaced the same second-level
+method-selection limit through Passpoint behavior.
+
 ## T3 notes if a fix PR is attempted
 
 Potentially safe direction:
