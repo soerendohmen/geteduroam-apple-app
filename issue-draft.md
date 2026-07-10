@@ -1,0 +1,131 @@
+# Only the first AuthenticationMethod of a profile is configured; TTLS-first profiles fail to authenticate on iOS
+
+## Environment
+
+- App: geteduroam iOS app, version: **TODO: fill exact app version**
+- iOS: **TODO: fill exact iOS version**
+- IdP/profile: Universität Duisburg-Essen (UDE), IdP `5016`, profile `16353`
+  (`love2eduroam`)
+- Profile methods: PEAP-MSCHAPv2 and TTLS-MSCHAPv2
+
+## Observed behavior
+
+UDE's WLAN team observed the following with the same eduroam CAT profile and
+real IdP:
+
+1. Profile order **PEAP-MSCHAPv2 first, TTLS-MSCHAPv2 second**:
+   authentication via the geteduroam iOS app works.
+2. Profile order **TTLS-MSCHAPv2 first, PEAP-MSCHAPv2 second**:
+   authentication via the geteduroam iOS app fails.
+3. Reverting the order to PEAP first made the app-based login work again.
+
+The native OS supplicant and the CAT-generated Apple `.mobileconfig` were not
+the failing path in this observation; the failure was seen with the geteduroam
+iOS app.
+
+Related data point from CAT/mobileconfig: the generated Apple profile appears
+to pin only one outer EAP type for this profile (`AcceptEAPTypes = [25]`, PEAP),
+so method order is decisive on Apple profiles as well. The app seems to mirror
+that single-method behavior programmatically.
+
+## Expected behavior
+
+For a profile with multiple compatible username/password authentication
+methods, the app should not silently drop all but the first buildable method.
+If iOS supports multiple outer EAP types in `NEHotspotEAPSettings`, the app
+should either configure the compatible methods together or otherwise document
+and report that only one method can be installed.
+
+At minimum, a PEAP + TTLS profile should not become order-sensitive without any
+visible indication to the user or IdP operator.
+
+## Actual behavior
+
+Only the first buildable `AuthenticationMethod` is represented in the generated
+`NEHotspotEAPSettings`.
+
+In `EAPConfigurator.buildSettings(...)`, the app iterates over
+`identityProvider.authenticationMethods.methods`, builds an
+`NEHotspotEAPSettings?` for each method, and then selects only the first result:
+
+https://github.com/geteduroam/apple-app/blob/f4b341a89c9e7276f40c1fb83d0f72f0227f6c6d/geteduroam/GeteduroamPackage/Sources/EAPConfigurator/EAPConfigurator.swift#L203-L264
+
+For username/password methods, `buildSettingsWithUsernamePassword(...)` then
+writes a single-element `supportedEAPTypes` array:
+
+https://github.com/geteduroam/apple-app/blob/f4b341a89c9e7276f40c1fb83d0f72f0227f6c6d/geteduroam/GeteduroamPackage/Sources/EAPConfigurator/EAPConfigurator.swift#L426-L427
+
+As a result, a PEAP + TTLS profile is effectively reduced to whichever method
+appears first and can be built. There is no connect-time fallback to the second
+method.
+
+## Additional TTLS inner-auth hypothesis
+
+This part is a hypothesis until the exact UDE `.eap-config` snippet is added.
+
+The app maps TTLS inner authentication methods differently depending on whether
+the eap-config encodes MSCHAPv2 as inner EAP or non-EAP:
+
+https://github.com/geteduroam/apple-app/blob/f4b341a89c9e7276f40c1fb83d0f72f0227f6c6d/geteduroam/GeteduroamPackage/Sources/EAPConfigurator/EAPConfigurator.swift#L354-L364
+
+https://github.com/geteduroam/apple-app/blob/f4b341a89c9e7276f40c1fb83d0f72f0227f6c6d/geteduroam/GeteduroamPackage/Sources/EAPConfigurator/EAPConfigurator.swift#L751-L767
+
+- `NonEAPAuthMethod Type 3` is mapped to
+  `.eapttlsInnerAuthenticationMSCHAPv2`.
+- inner `EAPMethod Type 26` is mapped to
+  `.eapttlsInnerAuthenticationEAP`.
+
+If the UDE TTLS method is encoded as inner `EAPMethod Type 26`, the app would
+configure TTLS-EAP-MSCHAPv2 rather than plain TTLS-MSCHAPv2. That could explain
+why the TTLS-first profile fails against a RADIUS setup expecting plain
+TTLS-MSCHAPv2, while PEAP-first works because TTLS is never reached.
+
+TODO: insert UDE TTLS `<AuthenticationMethod>` block here:
+
+```xml
+<!-- TODO: paste TTLS AuthenticationMethod from UDE .eap-config -->
+```
+
+## Existing coverage
+
+I could not find existing tests covering this case:
+
+- `ModelsTests.testEntireConfig` decodes one `AuthenticationMethod`, but not a
+  PEAP + TTLS multi-method profile.
+- `ConnectTests.testValidEAPConfig` also uses one `AuthenticationMethod`.
+- I did not find tests for `NonEAPAuthMethod Type 3` vs inner
+  `EAPMethod Type 26`.
+- I did not find tests asserting how `EAPConfigurator` handles multiple
+  username/password methods.
+
+The model type does store methods as an array
+(`AuthenticationMethodList.methods: [AuthenticationMethod]`), so this looks
+like a configuration-generation issue rather than an XML parsing issue.
+
+## Suggested fix direction
+
+For username/password methods only, consider merging compatible methods into one
+`NEHotspotEAPSettings` object by writing multiple outer types into
+`supportedEAPTypes`.
+
+To keep the change safe, I would not merge methods unless they share the same:
+
+- server-side trust anchors and server names,
+- outer identity,
+- credential source / username / password semantics,
+- non-certificate credential type.
+
+Methods with differing trust anchors, differing server names, differing outer
+identities, or client certificates should stay separate. EAP-TLS should not be
+changed here.
+
+## Validation offer
+
+UDE can test a fix or TestFlight build against a real IdP with both method
+orders:
+
+- PEAP first, TTLS second
+- TTLS first, PEAP second
+
+Console logs from `Logger.eap` can also be collected from a failing attempt if
+that helps.

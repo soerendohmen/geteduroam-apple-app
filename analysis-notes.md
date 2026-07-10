@@ -1,0 +1,159 @@
+# Analysis notes: multi-method EAP profile handling
+
+Date: 2026-07-10
+
+Repository state inspected: `geteduroam/apple-app` at
+`f4b341a89c9e7276f40c1fb83d0f72f0227f6c6d`, local fork remote
+`soerendohmen/geteduroam-apple-app`.
+
+## T1 findings
+
+### 1. Only one buildable AuthenticationMethod is configured
+
+Confirmed.
+
+`EAPConfigurator.buildSettings(...)` iterates over
+`identityProvider.authenticationMethods.methods`, attempts to build one
+`NEHotspotEAPSettings?` per `AuthenticationMethod`, filters unusable methods
+with `compactMap`, then immediately takes `.first`.
+
+Code refs:
+
+- `geteduroam/GeteduroamPackage/Sources/EAPConfigurator/EAPConfigurator.swift:197`
+  starts `buildSettings(...)`.
+- `.../EAPConfigurator.swift:203-206` iterates
+  `identityProvider.authenticationMethods.methods.compactMap`.
+- `.../EAPConfigurator.swift:262-264` returns each built setting and selects
+  `.first`.
+
+Implication: if a profile contains PEAP and TTLS, the app configures only the
+first method that survives validation and certificate import. The second method
+is not represented in the resulting `NEHotspotEAPSettings`, so iOS cannot fall
+back to it during association.
+
+### 2. Username/password EAP settings carry a single supported outer EAP type
+
+Confirmed.
+
+For `.EAPTTLS`, `.EAPFAST`, and `.EAPPEAP`, the per-method builder derives one
+outer EAP type from `authenticationMethod.EAPMethod.type`, derives one TTLS
+inner authentication type from the first parseable inner method, and then calls
+`buildSettingsWithUsernamePassword(...)`.
+
+Code refs:
+
+- `.../EAPConfigurator.swift:305` enters the username/password path for
+  `.EAPTTLS`, `.EAPFAST`, `.EAPPEAP`.
+- `.../EAPConfigurator.swift:353-364` derives `outerIdentity` and the first
+  supported inner auth type, defaulting to MSCHAPv2.
+- `.../EAPConfigurator.swift:426` sets
+  `eapSettings.supportedEAPTypes = [NSNumber(value: outerEapType.rawValue)]`.
+- `.../EAPConfigurator.swift:427` sets
+  `eapSettings.ttlsInnerAuthenticationType = innerAuthType`.
+
+Implication: even though `NEHotspotEAPSettings.supportedEAPTypes` is an array,
+this path always writes a single-element array for username/password methods.
+
+### 3. TTLS inner-auth mapping distinguishes EAP-MSCHAPv2 from non-EAP MSCHAPv2
+
+Confirmed.
+
+`buildSettings(...)` maps inner `EAPMethod` values directly and maps
+`NonEAPAuthMethod` values by negating the raw value before calling
+`getInnerAuthMethod(...)`.
+
+Code refs:
+
+- `.../EAPConfigurator.swift:354-364` maps inner methods and chooses the first
+  supported one.
+- `.../EAPConfigurator.swift:751-767` defines `getInnerAuthMethod(...)`.
+- `.../EAPConfigurator.swift:757-758` maps `-3` (Non-EAP MSCHAPv2) to
+  `.eapttlsInnerAuthenticationMSCHAPv2`.
+- `.../EAPConfigurator.swift:763-764` maps `26` (EAP-MSCHAPv2) to
+  `.eapttlsInnerAuthenticationEAP`.
+
+Implication: the UDE TTLS failure has two layers that should stay separate in
+the issue:
+
+- confirmed: method order controls which single outer EAP type the app
+  configures;
+- hypothesis pending UDE `.eap-config`: TTLS-first may fail because the TTLS
+  method is encoded as inner EAP-MSCHAPv2 (`Type 26`) rather than non-EAP
+  MSCHAPv2 (`Type 3`), resulting in TTLS-EAP-MSCHAPv2 instead of plain
+  TTLS-MSCHAPv2.
+
+### 4. Models layer stores AuthenticationMethod as an array
+
+Confirmed statically.
+
+`AuthenticationMethodList` defines `methods: [AuthenticationMethod]` and maps
+the XML key `AuthenticationMethod` to that array.
+
+Code refs:
+
+- `geteduroam/GeteduroamPackage/Sources/Models/EAP/AuthenticationMethodList.swift:4-13`.
+
+This strongly suggests the multi-method loss occurs in `EAPConfigurator`, not
+in the model type. However, there is no existing unit test that decodes two
+`AuthenticationMethod` siblings and asserts both are retained.
+
+### 5. Existing test coverage gaps
+
+Observed tests:
+
+- `geteduroam/GeteduroamPackage/Tests/ModelsTests/ModelsTests.swift:70-147`
+  decodes a full eap-config, but it contains only one `AuthenticationMethod`
+  and that method is EAP-TLS (`Type 13`).
+- `geteduroam/GeteduroamPackage/Tests/ConnectTests/ConnectTests.swift` has
+  valid/invalid eap-config flow tests; the valid sample also contains only one
+  `AuthenticationMethod`, again EAP-TLS (`Type 13`).
+- No test currently covers PEAP + TTLS in one profile.
+- No test currently covers `NonEAPAuthMethod Type 3` vs inner
+  `EAPMethod Type 26`.
+- No direct unit test currently covers `EAPConfigurator` behavior for multiple
+  username/password authentication methods.
+
+### 6. Local verification status
+
+Command attempted:
+
+```sh
+swift test --package-path geteduroam/GeteduroamPackage --filter ModelsTests
+```
+
+First run in the sandbox failed before manifest loading because Swift/Clang
+could not write their normal caches under the user home.
+
+Second run outside the sandbox fetched and resolved dependencies, started
+building, and compiled the `Models` target. It then failed before running
+`ModelsTests` while building unrelated package targets:
+
+```text
+Sources/AuthClient/OIDAuthState.swift:25:94: error: type 'Bundle' has no member 'module'
+```
+
+So the local result is: static analysis completed; SwiftPM test execution is
+blocked by the current package build setup in this environment, not by the
+multi-method analysis itself.
+
+## T3 notes if a fix PR is attempted
+
+Potentially safe direction:
+
+- Keep EAP-TLS separate.
+- Only consider merging `.EAPTTLS`, `.EAPPEAP`, and maybe `.EAPFAST` methods
+  that use username/password credentials.
+- Merge only when methods have the same server-side trust configuration
+  (same CA material and same server IDs), same outer identity, same username,
+  and same password source.
+- Do not merge methods with different trust anchors, different server names,
+  different outer identities, different credential types, or any client
+  certificate requirement.
+- Preserve method order when writing `supportedEAPTypes`.
+
+Open design question for a PR:
+
+- `NEHotspotEAPSettings` has only one `ttlsInnerAuthenticationType` property.
+  If PEAP + TTLS are merged into one settings object, this property can still
+  represent the TTLS inner auth choice, while PEAP likely ignores it. Tests and
+  real-device validation should focus on this exact assumption.
