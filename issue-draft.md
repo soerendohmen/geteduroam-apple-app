@@ -184,6 +184,10 @@ For username/password methods only, consider merging compatible methods into one
 `NEHotspotEAPSettings` object by writing multiple outer types into
 `supportedEAPTypes`.
 
+This matches the Apple SDK shape: `supportedEAPTypes` is an array of EAP types,
+while `ttlsInnerAuthenticationType` is one TTLS-specific setting used by the
+TTLS module.
+
 To keep the change safe, I would not merge methods unless they share the same:
 
 - server-side trust anchors and server names,

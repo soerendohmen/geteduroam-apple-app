@@ -334,6 +334,26 @@ Open design question for a PR:
   represent the TTLS inner auth choice, while PEAP likely ignores it. Tests and
   real-device validation should focus on this exact assumption.
 
+SDK check:
+
+- Local Apple SDK inspected:
+  `/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk/System/Library/Frameworks/NetworkExtension.framework/Headers/NEHotspotConfigurationManager.h`.
+- `NEHotspotEAPSettings.supportedEAPTypes` is documented as an
+  `NSArray<NSNumber *> *`: "Array of supported EAP Types."
+- `NEHotspotEAPSettings.ttlsInnerAuthenticationType` is a single
+  `NEHotspotConfigurationTTLSInnerAuthenticationType`; the header says it
+  "Specifies the inner authentication used by the TTLS module" and lists PAP,
+  CHAP, MSCHAP, MSCHAPv2, and EAP, defaulting to EAP.
+- `outerIdentity` is documented as relevant to TTLS, PEAP, and EAP-FAST.
+
+Interpretation from the SDK, not guesswork: Apple intentionally models multiple
+outer EAP types on one settings object, while TTLS has one TTLS-specific inner
+auth setting. A PEAP+TTLS merge can therefore be expressed by the API when the
+methods share the same username/password, outer identity, server names, and CA
+trust, with the single `ttlsInnerAuthenticationType` applying to the TTLS
+module. It still needs device validation because the header documents the model,
+not every supplicant negotiation edge case.
+
 ## Senior/auditor re-review
 
 Re-reviewed the draft and evidence with a stricter upstream-readiness lens.
