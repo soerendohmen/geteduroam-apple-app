@@ -24,9 +24,33 @@ the failing path in this observation; the failure was seen with the geteduroam
 iOS app.
 
 Related data point from CAT/mobileconfig: the generated Apple profile appears
-to pin only one outer EAP type for this profile (`AcceptEAPTypes = [25]`, PEAP),
-so method order is decisive on Apple profiles as well. The app seems to mirror
-that single-method behavior programmatically.
+to pin only one outer EAP type for this profile:
+
+```xml
+<key>AcceptEAPTypes</key>
+<array>
+  <integer>25</integer>
+</array>
+```
+
+That is PEAP. The same Apple profile also contains:
+
+```xml
+<key>OuterIdentity</key>
+<string>eduroam@uni-due.de</string>
+...
+<key>TLSTrustedServerNames</key>
+<array>
+  <string>radius1.uni-duisburg-essen.de</string>
+  <string>radius2.uni-duisburg-essen.de</string>
+</array>
+...
+<key>TTLSInnerAuthentication</key>
+<string>MSCHAPv2</string>
+```
+
+So method order is decisive in the generated Apple profile as well. The app
+seems to mirror that single-method behavior programmatically.
 
 ## Expected behavior
 
@@ -61,7 +85,11 @@ method.
 
 ## Additional TTLS inner-auth hypothesis
 
-This part is a hypothesis until the exact UDE `.eap-config` snippet is added.
+This part is still a hypothesis until the exact UDE `.eap-config` snippet is
+added. The generated Apple `.mobileconfig` shows `TTLSInnerAuthentication =
+MSCHAPv2`, but that converted output does not show whether the source
+`.eap-config` represented TTLS inner auth as `EAPMethod Type 26` or
+`NonEAPAuthMethod Type 3`.
 
 The app maps TTLS inner authentication methods differently depending on whether
 the eap-config encodes MSCHAPv2 as inner EAP or non-EAP:
