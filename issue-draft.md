@@ -141,7 +141,7 @@ against a RADIUS setup expecting plain TTLS-MSCHAPv2, while PEAP-first works
 because TTLS is never reached. The exact RADIUS-side rejection mechanism is
 still an interpretation of the observed behavior, not a packet-level trace.
 
-## Existing coverage
+## Existing coverage and added regression test
 
 I could not find existing tests covering this case:
 
@@ -156,6 +156,38 @@ I could not find existing tests covering this case:
 The model type does store methods as an array
 (`AuthenticationMethodList.methods: [AuthenticationMethod]`), so this looks
 like a configuration-generation issue rather than an XML parsing issue.
+
+I added a focused model/parser regression test on a local branch:
+
+- `ModelsTests.testMultiMethodCredentialPreservesPEAPAndTTLS`
+- decodes a UDE-shaped PEAP (`25`) + TTLS (`21`) fixture,
+- asserts that both `AuthenticationMethod` entries are preserved,
+- asserts that both methods use inner `EAPMethod Type 26`, with no
+  `NonEAPAuthMethod`.
+
+I also ran a smoke test against the real CAT eap-config source and confirmed:
+
+```text
+methods= 2
+outer= ['25', '21']
+inner_eap= [['26'], ['26']]
+inner_noneap= [[], []]
+SMOKE_OK
+```
+
+The focused SwiftPM test could not be executed in my local environment because
+the package build fails before test execution while compiling an unrelated
+`AuthClient` target:
+
+```text
+Sources/AuthClient/OIDAuthState.swift:25:94: error: type 'Bundle' has no member 'module'
+```
+
+The `Models` target itself builds successfully with:
+
+```sh
+swift build --package-path geteduroam/GeteduroamPackage --target Models
+```
 
 ## Related issues checked
 

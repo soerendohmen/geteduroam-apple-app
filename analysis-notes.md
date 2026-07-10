@@ -183,7 +183,7 @@ This strongly suggests the multi-method loss occurs in `EAPConfigurator`, not
 in the model type. However, there is no existing unit test that decodes two
 `AuthenticationMethod` siblings and asserts both are retained.
 
-### 5. Existing test coverage gaps
+### 5. Existing test coverage gaps and added coverage
 
 Observed tests:
 
@@ -199,7 +199,61 @@ Observed tests:
 - No direct unit test currently covers `EAPConfigurator` behavior for multiple
   username/password authentication methods.
 
+Added local coverage on this branch:
+
+- `ModelsTests.testMultiMethodCredentialPreservesPEAPAndTTLS` decodes a
+  UDE-shaped eap-config fixture with PEAP (`25`) first and TTLS (`21`) second.
+- The test asserts both `AuthenticationMethod` entries are retained by the
+  model layer.
+- The test asserts both methods use inner `EAPMethod Type 26` and no
+  `NonEAPAuthMethod`, matching the real UDE CAT source.
+- This is deliberately a model/parser regression test. It does not prove the
+  `NEHotspotEAPSettings` behavior; that belongs in a fix branch that extracts
+  a testable EAPConfigurator merge helper.
+
 ### 6. Local verification status
+
+Passed:
+
+```sh
+swift build --package-path geteduroam/GeteduroamPackage --target Models
+```
+
+Result:
+
+```text
+Build of target: 'Models' complete!
+```
+
+Passed smoke test against the real UDE CAT eap-config after downloading it to
+`/tmp/ude-love2eduroam.eap-config`:
+
+```sh
+curl -fsSL 'https://cat.eduroam.org/user/API.php?action=downloadInstaller&device=eap-generic&profile=16353' -o /tmp/ude-love2eduroam.eap-config
+python3 - <<'PY'
+import xml.etree.ElementTree as ET
+path = '/tmp/ude-love2eduroam.eap-config'
+root = ET.parse(path).getroot()
+methods = root.findall('.//AuthenticationMethod')
+outer = []
+inner_eap = []
+inner_noneap = []
+for method in methods:
+    outer.append(method.findtext('./EAPMethod/Type'))
+    inner_eap.append([e.text for e in method.findall('./InnerAuthenticationMethod/EAPMethod/Type')])
+    inner_noneap.append([e.text for e in method.findall('./InnerAuthenticationMethod/NonEAPAuthMethod/Type')])
+assert outer == ['25', '21'], outer
+assert inner_eap == [['26'], ['26']], inner_eap
+assert inner_noneap == [[], []], inner_noneap
+print('SMOKE_OK')
+PY
+```
+
+Result:
+
+```text
+SMOKE_OK
+```
 
 Command attempted:
 
@@ -221,6 +275,24 @@ Sources/AuthClient/OIDAuthState.swift:25:94: error: type 'Bundle' has no member 
 So the local result is: static analysis completed; SwiftPM test execution is
 blocked by the current package build setup in this environment, not by the
 multi-method analysis itself.
+
+The newly added focused test was also attempted explicitly:
+
+```sh
+swift test --package-path geteduroam/GeteduroamPackage --filter ModelsTests/testMultiMethodCredentialPreservesPEAPAndTTLS
+```
+
+It failed at the same pre-test build step:
+
+```text
+Sources/AuthClient/OIDAuthState.swift:25:94: error: type 'Bundle' has no member 'module'
+```
+
+`xcodebuild -list -project geteduroam.xcodeproj` also fails in this local
+environment before listing schemes because Xcode cannot load
+`IDESimulatorFoundation` due to a missing `DVTDownloads.framework`. The error
+suggests running `xcodebuild -runFirstLaunch`. This is an environment/toolchain
+problem, not evidence about the app code.
 
 ### 7. Related upstream issues checked
 

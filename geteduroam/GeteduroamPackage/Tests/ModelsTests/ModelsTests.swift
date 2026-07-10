@@ -145,6 +145,81 @@ final class ModelsTests: XCTestCase {
                 providerInfo: .init(displayName: .init(string: "eduroam"), description: nil, providerLocations: [], providerLogo: nil, termsOfUse: nil, helpdesk: nil))
         ]))
     }
+
+    func testMultiMethodCredentialPreservesPEAPAndTTLS() throws {
+        let sourceXML = """
+        <?xml version="1.0" encoding="utf-8"?>
+        <EAPIdentityProviderList xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="eap-metadata.xsd">
+            <EAPIdentityProvider ID="uni-due.de" namespace="urn:RFC4282:realm" lang="en" version="1">
+                <AuthenticationMethods>
+                    <AuthenticationMethod>
+                        <EAPMethod>
+                            <Type>25</Type>
+                        </EAPMethod>
+                        <ServerSideCredential>
+                            <CA format="X.509" encoding="base64">DEADBEEF==</CA>
+                            <ServerID>radius1.uni-due.de</ServerID>
+                            <ServerID>radius1.uni-duisburg-essen.de</ServerID>
+                            <ServerID>radius2.uni-due.de</ServerID>
+                            <ServerID>radius2.uni-duisburg-essen.de</ServerID>
+                        </ServerSideCredential>
+                        <ClientSideCredential>
+                            <OuterIdentity>eduroam@uni-due.de</OuterIdentity>
+                        </ClientSideCredential>
+                        <InnerAuthenticationMethod>
+                            <EAPMethod>
+                                <Type>26</Type>
+                            </EAPMethod>
+                        </InnerAuthenticationMethod>
+                    </AuthenticationMethod>
+                    <AuthenticationMethod>
+                        <EAPMethod>
+                            <Type>21</Type>
+                        </EAPMethod>
+                        <ServerSideCredential>
+                            <CA format="X.509" encoding="base64">DEADBEEF==</CA>
+                            <ServerID>radius1.uni-due.de</ServerID>
+                            <ServerID>radius1.uni-duisburg-essen.de</ServerID>
+                            <ServerID>radius2.uni-due.de</ServerID>
+                            <ServerID>radius2.uni-duisburg-essen.de</ServerID>
+                        </ServerSideCredential>
+                        <ClientSideCredential>
+                            <OuterIdentity>eduroam@uni-due.de</OuterIdentity>
+                        </ClientSideCredential>
+                        <InnerAuthenticationMethod>
+                            <EAPMethod>
+                                <Type>26</Type>
+                            </EAPMethod>
+                        </InnerAuthenticationMethod>
+                    </AuthenticationMethod>
+                </AuthenticationMethods>
+                <CredentialApplicability>
+                    <IEEE80211>
+                        <SSID>eduroam</SSID>
+                        <MinRSNProto>CCMP</MinRSNProto>
+                    </IEEE80211>
+                </CredentialApplicability>
+            </EAPIdentityProvider>
+        </EAPIdentityProviderList>
+        """
+
+        let decoded = try decoder.decode(EAPIdentityProviderList.self, from: Data(sourceXML.utf8))
+        let methods = try XCTUnwrap(decoded.providers.first?.authenticationMethods.methods)
+
+        XCTAssertEqual(methods.map(\.EAPMethod.type), [25, 21])
+        XCTAssertEqual(methods.map { $0.innerAuthenticationMethods.first?.EAPMethod?.type }, [26, 26])
+        XCTAssertEqual(methods.map { $0.innerAuthenticationMethods.first?.nonEAPAuthMethod?.type }, [nil, nil])
+        let serverIDs = [
+            "radius1.uni-due.de",
+            "radius1.uni-duisburg-essen.de",
+            "radius2.uni-due.de",
+            "radius2.uni-duisburg-essen.de"
+        ]
+        XCTAssertEqual(methods.map(\.serverSideCredential?.serverIDs), [
+            serverIDs,
+            serverIDs
+        ])
+    }
     
     func testLocalizedProviderInfo() throws {
         let sourceXML = """
