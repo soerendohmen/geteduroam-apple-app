@@ -333,3 +333,35 @@ Open design question for a PR:
   If PEAP + TTLS are merged into one settings object, this property can still
   represent the TTLS inner auth choice, while PEAP likely ignores it. Tests and
   real-device validation should focus on this exact assumption.
+
+## Senior/auditor re-review
+
+Re-reviewed the draft and evidence with a stricter upstream-readiness lens.
+
+Findings:
+
+- Strong evidence: the app code definitely reduces multiple
+  `AuthenticationMethod`s to the first buildable settings object.
+- Strong evidence: the UDE source eap-config definitely contains PEAP (`25`)
+  and TTLS (`21`) methods, both with inner `EAPMethod Type 26`.
+- Strong evidence: the generated Apple profile for the PEAP-first order is
+  single-method and pins `AcceptEAPTypes = [25]`.
+- Moderate inference: TTLS-first fails because the app configures
+  TTLS-EAP-MSCHAPv2 and UDE RADIUS expects plain TTLS-MSCHAPv2. This is
+  consistent with code and observation, but remains an inference until a
+  packet/RADIUS trace or app log confirms the exact rejection.
+- Draft risk reduced: the issue text now treats `.mobileconfig` as supporting
+  context rather than proof of app behavior, and distinguishes the
+  operator-level "TTLS-MSCHAPv2" description from the source eap-config's
+  `EAPMethod Type 26` encoding.
+
+Senior recommendation:
+
+- File the issue before attempting a fix PR.
+- Phrase the core bug as "the app silently keeps only the first valid
+  AuthenticationMethod" rather than "TTLS is wrong" or "RCOI is wrong".
+- Mention `#154` as likely same `.first valid method` root cause, not merely
+  vaguely related.
+- Keep `#161` as a sibling design limitation one level higher in the XML tree.
+- Do not submit a code fix that merges methods across different trust anchors,
+  outer identities, credential types, or EAP-TLS.

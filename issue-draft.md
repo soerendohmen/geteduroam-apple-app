@@ -6,7 +6,10 @@
 - iOS: **TODO: fill exact iOS version**
 - IdP/profile: Universität Duisburg-Essen (UDE), IdP `5016`, profile `16353`
   (`love2eduroam`)
-- Profile methods: PEAP-MSCHAPv2 and TTLS-MSCHAPv2
+- Profile methods as configured/operated: PEAP-MSCHAPv2 and TTLS-MSCHAPv2.
+  In the source eap-config, both methods are encoded with inner
+  `EAPMethod Type 26`; the generated Apple `.mobileconfig` renders the TTLS
+  inner auth as `MSCHAPv2`.
 - Source eap-config:
   `https://cat.eduroam.org/user/API.php?action=downloadInstaller&device=eap-generic&profile=16353`
 
@@ -25,8 +28,8 @@ The native OS supplicant and the CAT-generated Apple `.mobileconfig` were not
 the failing path in this observation; the failure was seen with the geteduroam
 iOS app.
 
-Related data point from CAT/mobileconfig: the generated Apple profile appears
-to pin only one outer EAP type for this profile:
+Related data point from CAT/mobileconfig: for the PEAP-first profile, the
+generated Apple profile pins only one outer EAP type:
 
 ```xml
 <key>AcceptEAPTypes</key>
@@ -51,8 +54,9 @@ That is PEAP. The same Apple profile also contains:
 <string>MSCHAPv2</string>
 ```
 
-So method order is decisive in the generated Apple profile as well. The app
-seems to mirror that single-method behavior programmatically.
+So the generated Apple profile is single-method for this profile/order. This is
+supporting context, not the primary app bug: the app's own code path below also
+reduces the eap-config to one outer method programmatically.
 
 ## Expected behavior
 
@@ -155,13 +159,15 @@ like a configuration-generation issue rather than an XML parsing issue.
 
 ## Related issues checked
 
-This does not appear to be a duplicate of the current open issues:
+This may overlap with an existing root cause, but it is not a duplicate of the
+current open issues:
 
 - #154 was reported as "only the first RCOI" for Passpoint, but the current
   code already maps all provider-level OIDs into `roamingConsortiumOIs`.
   A maintainer comment there points at the same `EAPConfigurator.swift`
   `.first` path and says only the first valid method is used. So #154 may be
-  another externally visible symptom of the same method-selection limitation.
+  another externally visible symptom of the same method-selection limitation;
+  this report adds a concrete PEAP/TTLS reproduction and source profile.
 - #161 is about a second `EAPIdentityProvider` in one `.eap-config`. That is
   another "second entry is not configured" pattern, but at provider level rather
   than multiple `AuthenticationMethod`s inside one `EAPIdentityProvider`.
