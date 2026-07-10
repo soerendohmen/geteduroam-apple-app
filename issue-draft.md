@@ -7,6 +7,8 @@
 - IdP/profile: Universität Duisburg-Essen (UDE), IdP `5016`, profile `16353`
   (`love2eduroam`)
 - Profile methods: PEAP-MSCHAPv2 and TTLS-MSCHAPv2
+- Source eap-config:
+  `https://cat.eduroam.org/user/API.php?action=downloadInstaller&device=eap-generic&profile=16353`
 
 ## Observed behavior
 
@@ -83,13 +85,38 @@ As a result, a PEAP + TTLS profile is effectively reduced to whichever method
 appears first and can be built. There is no connect-time fallback to the second
 method.
 
-## Additional TTLS inner-auth hypothesis
+## TTLS inner-auth source encoding
 
-This part is still a hypothesis until the exact UDE `.eap-config` snippet is
-added. The generated Apple `.mobileconfig` shows `TTLSInnerAuthentication =
-MSCHAPv2`, but that converted output does not show whether the source
-`.eap-config` represented TTLS inner auth as `EAPMethod Type 26` or
+The UDE `.eap-config` source confirms that both PEAP and TTLS use inner
+`EAPMethod Type 26`. The TTLS method is not encoded as
 `NonEAPAuthMethod Type 3`.
+
+Minimal source excerpt:
+
+```xml
+<AuthenticationMethod>
+  <EAPMethod>
+    <Type>25</Type>
+  </EAPMethod>
+  ...
+  <InnerAuthenticationMethod>
+    <EAPMethod>
+      <Type>26</Type>
+    </EAPMethod>
+  </InnerAuthenticationMethod>
+</AuthenticationMethod>
+<AuthenticationMethod>
+  <EAPMethod>
+    <Type>21</Type>
+  </EAPMethod>
+  ...
+  <InnerAuthenticationMethod>
+    <EAPMethod>
+      <Type>26</Type>
+    </EAPMethod>
+  </InnerAuthenticationMethod>
+</AuthenticationMethod>
+```
 
 The app maps TTLS inner authentication methods differently depending on whether
 the eap-config encodes MSCHAPv2 as inner EAP or non-EAP:
@@ -103,16 +130,12 @@ https://github.com/geteduroam/apple-app/blob/f4b341a89c9e7276f40c1fb83d0f72f0227
 - inner `EAPMethod Type 26` is mapped to
   `.eapttlsInnerAuthenticationEAP`.
 
-If the UDE TTLS method is encoded as inner `EAPMethod Type 26`, the app would
-configure TTLS-EAP-MSCHAPv2 rather than plain TTLS-MSCHAPv2. That could explain
-why the TTLS-first profile fails against a RADIUS setup expecting plain
-TTLS-MSCHAPv2, while PEAP-first works because TTLS is never reached.
-
-TODO: insert UDE TTLS `<AuthenticationMethod>` block here:
-
-```xml
-<!-- TODO: paste TTLS AuthenticationMethod from UDE .eap-config -->
-```
+Because the UDE TTLS method is encoded as inner `EAPMethod Type 26`, the app
+would configure TTLS-EAP-MSCHAPv2 rather than plain TTLS-MSCHAPv2 when TTLS is
+the selected outer method. That could explain why the TTLS-first profile fails
+against a RADIUS setup expecting plain TTLS-MSCHAPv2, while PEAP-first works
+because TTLS is never reached. The exact RADIUS-side rejection mechanism is
+still an interpretation of the observed behavior, not a packet-level trace.
 
 ## Existing coverage
 
@@ -129,6 +152,20 @@ I could not find existing tests covering this case:
 The model type does store methods as an array
 (`AuthenticationMethodList.methods: [AuthenticationMethod]`), so this looks
 like a configuration-generation issue rather than an XML parsing issue.
+
+## Related issues checked
+
+This does not appear to be a duplicate of the current open issues:
+
+- #161 is about a second `EAPIdentityProvider` in one `.eap-config`. This issue
+  is about multiple `AuthenticationMethod`s inside one `EAPIdentityProvider`.
+- #154 is about Passpoint/RCOI array handling.
+- #163 and #139 are certificate trust / EAP-TLS issues. This report is about
+  username/password PEAP + TTLS method selection; EAP-TLS should remain out of
+  scope.
+- #83 fixed reading inner non-EAP methods, but this report is about dropping
+  the second outer authentication method and the source profile using inner
+  `EAPMethod Type 26`.
 
 ## Suggested fix direction
 

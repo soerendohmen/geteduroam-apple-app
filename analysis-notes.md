@@ -77,12 +77,57 @@ the issue:
 
 - confirmed: method order controls which single outer EAP type the app
   configures;
-- hypothesis pending UDE `.eap-config`: TTLS-first may fail because the TTLS
-  method is encoded as inner EAP-MSCHAPv2 (`Type 26`) rather than non-EAP
-  MSCHAPv2 (`Type 3`), resulting in TTLS-EAP-MSCHAPv2 instead of plain
-  TTLS-MSCHAPv2.
+- confirmed from UDE `.eap-config`: the TTLS method is encoded as inner
+  EAP-MSCHAPv2 (`Type 26`) rather than non-EAP MSCHAPv2 (`Type 3`), so the
+  current app mapping selects `.eapttlsInnerAuthenticationEAP`. The remaining
+  hypothesis is whether that exact TTLS-EAP-MSCHAPv2 behavior is what the UDE
+  RADIUS side rejects.
 
-### 3a. UDE Apple mobileconfig cross-check
+### 3b. UDE eap-config source
+
+The source eap-config is available from the CAT generic EAP download endpoint:
+
+`https://cat.eduroam.org/user/API.php?action=downloadInstaller&device=eap-generic&profile=16353`
+
+The response headers identify it as:
+
+```text
+content-type: application/eap-config
+content-disposition: inline; filename="eduroam-eap-generic-UoD-love2eduroam.eap-config"
+```
+
+Minimal relevant source excerpt:
+
+```xml
+<AuthenticationMethod>
+  <EAPMethod>
+    <Type>25</Type>
+  </EAPMethod>
+  ...
+  <InnerAuthenticationMethod>
+    <EAPMethod>
+      <Type>26</Type>
+    </EAPMethod>
+  </InnerAuthenticationMethod>
+</AuthenticationMethod>
+<AuthenticationMethod>
+  <EAPMethod>
+    <Type>21</Type>
+  </EAPMethod>
+  ...
+  <InnerAuthenticationMethod>
+    <EAPMethod>
+      <Type>26</Type>
+    </EAPMethod>
+  </InnerAuthenticationMethod>
+</AuthenticationMethod>
+```
+
+So the UDE source profile has PEAP first (`25`), TTLS second (`21`), and the
+TTLS method uses inner EAP-MSCHAPv2 (`Type 26`), not
+`NonEAPAuthMethod Type 3`.
+
+### 3c. UDE Apple mobileconfig cross-check
 
 Sören provided the CAT-generated Apple profile:
 
@@ -119,6 +164,9 @@ It does **not** answer the remaining eap-config question, because the
 `.mobileconfig` is the converted Apple output and no longer contains the source
 `<AuthenticationMethod>` XML encoding that would distinguish
 `<EAPMethod><Type>26</Type>` from `<NonEAPAuthMethod><Type>3</Type>`.
+
+The eap-config source above now answers that question: source TTLS is
+`EAPMethod Type 26`.
 
 ### 4. Models layer stores AuthenticationMethod as an array
 
@@ -173,6 +221,33 @@ Sources/AuthClient/OIDAuthState.swift:25:94: error: type 'Bundle' has no member 
 So the local result is: static analysis completed; SwiftPM test execution is
 blocked by the current package build setup in this environment, not by the
 multi-method analysis itself.
+
+### 7. Related upstream issues checked
+
+GitHub issues were checked through the public API on 2026-07-10.
+
+Relevant but not duplicates:
+
+- `#161` (open): second `EAPIdentityProvider` in one `.eap-config` is not
+  configured. Related "second thing ignored" pattern, but different XML level:
+  provider-level, not multiple `AuthenticationMethod`s inside one provider.
+- `#154` (open): only first RCOI configured for Passpoint. Related
+  first-entry/array handling pattern, but Passpoint/RCOI, not EAP method
+  selection.
+- `#163` (open): EAP-TLS certificate trust issue where app-installed profile
+  fails but manual `.mobileconfig` works. Different credential type and trust
+  path; EAP-TLS should stay out of our proposed fix.
+- `#139` (open): CA rotation / trust store problem. Certificate trust class,
+  not multi-method EAP selection.
+- `#83` (closed PR): fixed inner non-EAP method not being read. This is
+  historically relevant because our issue depends on the distinction between
+  `NonEAPAuthMethod Type 3` and `EAPMethod Type 26`, but it does not cover
+  dropping the second outer authentication method.
+- `#122` (closed): "No valid outer EAP type"; adjacent EAP configuration
+  error, not this order-sensitive multi-method failure.
+
+Conclusion: file a new issue. It should explicitly mention `#161`, `#154`,
+`#163`, and `#83` as related but distinct.
 
 ## T3 notes if a fix PR is attempted
 
