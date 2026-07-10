@@ -255,44 +255,56 @@ Result:
 SMOKE_OK
 ```
 
-Command attempted:
+SwiftPM direct test still fails before executing `ModelsTests`:
 
 ```sh
 swift test --package-path geteduroam/GeteduroamPackage --filter ModelsTests
 ```
 
-First run in the sandbox failed before manifest loading because Swift/Clang
-could not write their normal caches under the user home.
-
-Second run outside the sandbox fetched and resolved dependencies, started
-building, and compiled the `Models` target. It then failed before running
-`ModelsTests` while building unrelated package targets:
+The package build compiles `Models` but then fails while building unrelated
+package targets:
 
 ```text
 Sources/AuthClient/OIDAuthState.swift:25:94: error: type 'Bundle' has no member 'module'
 ```
 
-So the local result is: static analysis completed; SwiftPM test execution is
-blocked by the current package build setup in this environment, not by the
-multi-method analysis itself.
+So direct `swift test` remains a package-layout problem, not a failure of the
+multi-method model test.
 
-The newly added focused test was also attempted explicitly:
+The local Xcode toolchain was repaired with:
 
 ```sh
-swift test --package-path geteduroam/GeteduroamPackage --filter ModelsTests/testMultiMethodCredentialPreservesPEAPAndTTLS
+xcodebuild -runFirstLaunch
+xcodebuild -downloadPlatform iOS
 ```
 
-It failed at the same pre-test build step:
+After that, Xcode sees iOS simulator destinations and a generic iOS build
+succeeds with macro/plugin validation skipped for CLI use:
+
+```sh
+xcodebuild build -project geteduroam.xcodeproj -scheme 'geteduroam Test' -destination generic/platform=iOS CODE_SIGNING_ALLOWED=NO -skipMacroValidation -skipPackagePluginValidation
+```
+
+Result:
 
 ```text
-Sources/AuthClient/OIDAuthState.swift:25:94: error: type 'Bundle' has no member 'module'
+** BUILD SUCCEEDED **
 ```
 
-`xcodebuild -list -project geteduroam.xcodeproj` also fails in this local
-environment before listing schemes because Xcode cannot load
-`IDESimulatorFoundation` due to a missing `DVTDownloads.framework`. The error
-suggests running `xcodebuild -runFirstLaunch`. This is an environment/toolchain
-problem, not evidence about the app code.
+The newly added focused test now runs successfully through Xcode on the
+installed iOS simulator:
+
+```sh
+xcodebuild test -project geteduroam.xcodeproj -scheme 'geteduroam Test' -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.3.1' -only-testing:ModelsTests/ModelsTests/testMultiMethodCredentialPreservesPEAPAndTTLS -skipMacroValidation -skipPackagePluginValidation
+```
+
+Result:
+
+```text
+Test Case '-[ModelsTests.ModelsTests testMultiMethodCredentialPreservesPEAPAndTTLS]' passed (0.034 seconds).
+Executed 1 test, with 0 failures (0 unexpected)
+** TEST SUCCEEDED **
+```
 
 ### 7. Related upstream issues checked
 

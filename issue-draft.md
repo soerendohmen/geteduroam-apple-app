@@ -175,18 +175,31 @@ inner_noneap= [[], []]
 SMOKE_OK
 ```
 
-The focused SwiftPM test could not be executed in my local environment because
-the package build fails before test execution while compiling an unrelated
-`AuthClient` target:
+The direct SwiftPM command still fails before test execution while compiling an
+unrelated `AuthClient` target:
 
 ```text
 Sources/AuthClient/OIDAuthState.swift:25:94: error: type 'Bundle' has no member 'module'
 ```
 
-The `Models` target itself builds successfully with:
+The `Models` target itself builds successfully:
 
 ```sh
 swift build --package-path geteduroam/GeteduroamPackage --target Models
+```
+
+After repairing the local Xcode first-launch/platform setup, the focused test
+also passes through Xcode on an iOS simulator:
+
+```sh
+xcodebuild test -project geteduroam.xcodeproj -scheme 'geteduroam Test' -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.3.1' -only-testing:ModelsTests/ModelsTests/testMultiMethodCredentialPreservesPEAPAndTTLS -skipMacroValidation -skipPackagePluginValidation
+```
+
+Result:
+
+```text
+Executed 1 test, with 0 failures (0 unexpected)
+** TEST SUCCEEDED **
 ```
 
 ## Related issues checked
