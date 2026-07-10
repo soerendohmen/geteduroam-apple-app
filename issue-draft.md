@@ -2,8 +2,10 @@
 
 ## Environment
 
-- App: geteduroam iOS app, version: **TODO: fill exact app version**
-- iOS: **TODO: fill exact iOS version**
+- App: geteduroam iOS app, exact version currently unknown; the test was
+  performed by UDE WLAN operations staff
+- iOS: exact version currently unknown; the test was performed on iPhone/iOS
+  by UDE WLAN operations staff
 - IdP/profile: Universität Duisburg-Essen (UDE), IdP `5016`, profile `16353`
   (`love2eduroam`)
 - Profile methods as configured/operated: PEAP-MSCHAPv2 and TTLS-MSCHAPv2.
@@ -12,6 +14,13 @@
   inner auth as `MSCHAPv2`.
 - Source eap-config:
   `https://cat.eduroam.org/user/API.php?action=downloadInstaller&device=eap-generic&profile=16353`
+- Observed failure: iOS geteduroam app. The same shared
+  `EAPConfigurator` code path is also used by the macOS target, but I have not
+  reproduced the order-sensitive WLAN failure on macOS.
+
+I do not currently have the exact app/iOS version because the failing test was
+performed by a colleague who is currently unavailable. I can add those details
+later if needed.
 
 ## Observed behavior
 
@@ -201,6 +210,26 @@ Result:
 Executed 1 test, with 0 failures (0 unexpected)
 ** TEST SUCCEEDED **
 ```
+
+The macOS target also builds, and the same focused model/parser test passes on
+macOS:
+
+```sh
+xcodebuild build -project geteduroam.xcodeproj -scheme 'geteduroam Test' -destination 'platform=macOS,arch=arm64' CODE_SIGNING_ALLOWED=NO -skipMacroValidation -skipPackagePluginValidation
+xcodebuild test -project geteduroam.xcodeproj -scheme 'geteduroam Test' -destination 'platform=macOS,arch=arm64' CODE_SIGNING_ALLOWED=NO -only-testing:ModelsTests/ModelsTests/testMultiMethodCredentialPreservesPEAPAndTTLS -skipMacroValidation -skipPackagePluginValidation
+```
+
+Result:
+
+```text
+** BUILD SUCCEEDED **
+Executed 1 test, with 0 failures (0 unexpected)
+** TEST SUCCEEDED **
+```
+
+This confirms the shared parser/model behavior on macOS as well. It does not
+prove the real macOS WLAN installation path or RADIUS behavior; I have not run
+the PEAP-first/TTLS-first field reproduction with the macOS app.
 
 ## Related issues checked
 

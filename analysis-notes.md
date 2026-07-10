@@ -306,6 +306,36 @@ Executed 1 test, with 0 failures (0 unexpected)
 ** TEST SUCCEEDED **
 ```
 
+The macOS target also builds with signing disabled for local CLI validation:
+
+```sh
+xcodebuild build -project geteduroam.xcodeproj -scheme 'geteduroam Test' -destination 'platform=macOS,arch=arm64' CODE_SIGNING_ALLOWED=NO -skipMacroValidation -skipPackagePluginValidation
+```
+
+Result:
+
+```text
+** BUILD SUCCEEDED **
+```
+
+The same focused model/parser test also passes on macOS:
+
+```sh
+xcodebuild test -project geteduroam.xcodeproj -scheme 'geteduroam Test' -destination 'platform=macOS,arch=arm64' CODE_SIGNING_ALLOWED=NO -only-testing:ModelsTests/ModelsTests/testMultiMethodCredentialPreservesPEAPAndTTLS -skipMacroValidation -skipPackagePluginValidation
+```
+
+Result:
+
+```text
+Test Case '-[ModelsTests.ModelsTests testMultiMethodCredentialPreservesPEAPAndTTLS]' passed (0.005 seconds).
+Executed 1 test, with 0 failures (0 unexpected)
+** TEST SUCCEEDED **
+```
+
+This validates compilation and shared parser/model behavior for macOS. It does
+not reproduce the real macOS WLAN installation path or RADIUS behavior; the
+field reproduction remains iOS-only.
+
 ### 7. Related upstream issues checked
 
 GitHub issues were checked through the public API on 2026-07-10.
