@@ -231,9 +231,13 @@ Relevant but not duplicates:
 - `#161` (open): second `EAPIdentityProvider` in one `.eap-config` is not
   configured. Related "second thing ignored" pattern, but different XML level:
   provider-level, not multiple `AuthenticationMethod`s inside one provider.
-- `#154` (open): only first RCOI configured for Passpoint. Related
-  first-entry/array handling pattern, but Passpoint/RCOI, not EAP method
-  selection.
+- `#154` (open): reported as only first RCOI configured for Passpoint. The
+  current code already maps all provider-level OIDs into
+  `hs20.roamingConsortiumOIs`, but a maintainer comment on 2025-04-08 says
+  "Indeed only the first valid method is used" and links to the same
+  `EAPConfigurator.swift` `.first` selection path. This is likely another
+  externally visible symptom of the same method-selection limitation, although
+  the user-facing symptom is Passpoint/RCOI rather than PEAP-vs-TTLS.
 - `#163` (open): EAP-TLS certificate trust issue where app-installed profile
   fails but manual `.mobileconfig` works. Different credential type and trust
   path; EAP-TLS should stay out of our proposed fix.
@@ -246,8 +250,9 @@ Relevant but not duplicates:
 - `#122` (closed): "No valid outer EAP type"; adjacent EAP configuration
   error, not this order-sensitive multi-method failure.
 
-Conclusion: file a new issue. It should explicitly mention `#161`, `#154`,
-`#163`, and `#83` as related but distinct.
+Conclusion: file a new issue. It should explicitly mention `#154` as likely
+sharing the same `.first valid method` root cause, `#161` as a similar
+provider-level limitation, and `#163`/`#139` as distinct trust/EAP-TLS issues.
 
 ## T3 notes if a fix PR is attempted
 

@@ -157,9 +157,14 @@ like a configuration-generation issue rather than an XML parsing issue.
 
 This does not appear to be a duplicate of the current open issues:
 
-- #161 is about a second `EAPIdentityProvider` in one `.eap-config`. This issue
-  is about multiple `AuthenticationMethod`s inside one `EAPIdentityProvider`.
-- #154 is about Passpoint/RCOI array handling.
+- #154 was reported as "only the first RCOI" for Passpoint, but the current
+  code already maps all provider-level OIDs into `roamingConsortiumOIs`.
+  A maintainer comment there points at the same `EAPConfigurator.swift`
+  `.first` path and says only the first valid method is used. So #154 may be
+  another externally visible symptom of the same method-selection limitation.
+- #161 is about a second `EAPIdentityProvider` in one `.eap-config`. That is
+  another "second entry is not configured" pattern, but at provider level rather
+  than multiple `AuthenticationMethod`s inside one `EAPIdentityProvider`.
 - #163 and #139 are certificate trust / EAP-TLS issues. This report is about
   username/password PEAP + TTLS method selection; EAP-TLS should remain out of
   scope.
