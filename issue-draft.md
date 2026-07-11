@@ -2,12 +2,10 @@
 
 ## Environment
 
-- App: geteduroam iOS app, exact version currently unknown; the test was
-  performed by WLAN operations staff at the University of Duisburg-Essen
-- iOS: exact version currently unknown; the test was performed on iPhone/iOS
-  by WLAN operations staff at the University of Duisburg-Essen
-- IdP/profile: University of Duisburg-Essen (Universität Duisburg-Essen, UDE),
+- IdP/profile: University of Duisburg-Essen (UDE),
   Germany; eduroam IdP `5016`, profile `16353` (`love2eduroam`)
+- App: geteduroam iOS app, exact version currently unknown
+- iOS: exact version currently unknown
 - Profile methods as configured/operated: PEAP-MSCHAPv2 and TTLS-MSCHAPv2.
   In the source eap-config, both methods are encoded with inner
   `EAPMethod Type 26`; the generated Apple `.mobileconfig` renders the TTLS
@@ -24,8 +22,8 @@ later if needed.
 
 ## Observed behavior
 
-The WLAN operations team at the University of Duisburg-Essen observed the
-following with the same eduroam CAT profile and real IdP:
+The UDE WLAN operations team observed the following with the same eduroam CAT
+profile and real IdP:
 
 1. Profile order **PEAP-MSCHAPv2 first, TTLS-MSCHAPv2 second**:
    authentication via the geteduroam iOS app works.
