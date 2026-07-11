@@ -72,16 +72,16 @@ Code refs:
 - `.../EAPConfigurator.swift:763-764` maps `26` (EAP-MSCHAPv2) to
   `.eapttlsInnerAuthenticationEAP`.
 
-Implication: the UDE TTLS failure has two layers that should stay separate in
-the issue:
+Implication: the observed TTLS-first failure in this profile has two layers
+that should stay separate in the issue:
 
 - confirmed: method order controls which single outer EAP type the app
   configures;
-- confirmed from UDE `.eap-config`: the TTLS method is encoded as inner
+- confirmed from this `.eap-config`: the TTLS method is encoded as inner
   EAP-MSCHAPv2 (`Type 26`) rather than non-EAP MSCHAPv2 (`Type 3`), so the
   current app mapping selects `.eapttlsInnerAuthenticationEAP`. The remaining
-  hypothesis is whether that exact TTLS-EAP-MSCHAPv2 behavior is what the UDE
-  RADIUS side rejects.
+  hypothesis is whether that exact TTLS-EAP-MSCHAPv2 behavior is rejected by
+  RADIUS setups that expect plain TTLS-MSCHAPv2.
 
 ### 3b. UDE eap-config source
 
@@ -480,10 +480,11 @@ Findings:
   and TTLS (`21`) methods, both with inner `EAPMethod Type 26`.
 - Strong evidence: the generated Apple profile for the PEAP-first order is
   single-method and pins `AcceptEAPTypes = [25]`.
-- Moderate inference: TTLS-first fails because the app configures
-  TTLS-EAP-MSCHAPv2 and UDE RADIUS expects plain TTLS-MSCHAPv2. This is
-  consistent with code and observation, but remains an inference until a
-  packet/RADIUS trace or app log confirms the exact rejection.
+- Moderate inference: a TTLS-first failure may occur when the app configures
+  TTLS-EAP-MSCHAPv2 while the RADIUS side expects plain TTLS-MSCHAPv2. This is
+  consistent with code and observation for this profile, but remains an
+  inference until a packet/RADIUS trace or app log confirms the exact
+  rejection.
 - Draft risk reduced: the issue text now treats `.mobileconfig` as supporting
   context rather than proof of app behavior, and distinguishes the
   operator-level "TTLS-MSCHAPv2" description from the source eap-config's

@@ -141,12 +141,13 @@ https://github.com/geteduroam/apple-app/blob/f4b341a89c9e7276f40c1fb83d0f72f0227
 - inner `EAPMethod Type 26` is mapped to
   `.eapttlsInnerAuthenticationEAP`.
 
-Because the UDE TTLS method is encoded as inner `EAPMethod Type 26`, the app
-would configure TTLS-EAP-MSCHAPv2 rather than plain TTLS-MSCHAPv2 when TTLS is
-the selected outer method. That could explain why the TTLS-first profile fails
-against a RADIUS setup expecting plain TTLS-MSCHAPv2, while PEAP-first works
-because TTLS is never reached. The exact RADIUS-side rejection mechanism is
-still an interpretation of the observed behavior, not a packet-level trace.
+In this concrete profile, the TTLS method is encoded as inner
+`EAPMethod Type 26`. With the current mapping, selecting TTLS would configure
+TTLS-EAP-MSCHAPv2 rather than plain TTLS-MSCHAPv2. That may explain a
+TTLS-first failure if the RADIUS side expects plain TTLS-MSCHAPv2, while
+PEAP-first works because TTLS is never reached. The exact RADIUS-side rejection
+mechanism is still an interpretation of the observed behavior, not a
+packet-level trace.
 
 ## Existing coverage and added regression test
 
